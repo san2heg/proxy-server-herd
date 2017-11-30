@@ -11,30 +11,30 @@ class ProxyServerClientProtocol(asyncio.Protocol):
 
     # Setup for logger
     def __init_logger(self):
-        self.logger = logging.getLogger(server_name)
-        formatter = logging.Formatter('%(asctime)s - %(levelname)s : %(message)s')
-        fileHandler = logging.FileHandler("./logs/" + server_name.lower() + ".log", mode='w')
+        self.logger = logging.getLogger(self.name)
+        formatter = logging.Formatter('%(asctime)s - (%(name)s) %(levelname)s : %(message)s')
+        fileHandler = logging.FileHandler("./logs/" + self.name.lower() + ".log", mode='w')
         fileHandler.setFormatter(formatter)
         streamHandler = logging.StreamHandler()
         streamHandler.setFormatter(formatter)
         self.logger.setLevel('INFO')
         self.logger.addHandler(fileHandler)
         self.logger.addHandler(streamHandler)
-        self.logger.info('Server Protocol Initialized for {}'.format(server_name))
+        self.logger.info('Server Protocol Initialized')
 
     def connection_made(self, transport):
         peername = transport.get_extra_info('peername')
-        print('Connection from {}'.format(peername))
+        self.logger.info('Connection from {}'.format(peername))
         self.transport = transport
 
     def data_received(self, data):
         message = data.decode()
-        print('Data received: {!r}'.format(message))
+        self.logger.info('Data received: {!r}'.format(message))
 
-        print('Send: {!r}'.format(message))
+        self.logger.info('Send: {!r}'.format(message))
         self.transport.write(data)
 
-        print('Close the client socket')
+        self.logger.info('Close the client socket')
         self.transport.close()
 
 if __name__ == '__main__':
@@ -55,7 +55,7 @@ if __name__ == '__main__':
 
     # Start server
     loop = asyncio.get_event_loop()
-    coro = loop.create_server(server_protocol, config.SERVER_HOST, config.SERVER_PORT[server_name])
+    coro = loop.create_server(lambda: ProxyServerClientProtocol(server_name), config.SERVER_HOST, port_num)
     server = loop.run_until_complete(coro)
 
     # Serve requests until KeyboardInterrupt

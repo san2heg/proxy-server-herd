@@ -14,13 +14,14 @@ class EchoClientProtocol(asyncio.Protocol):
 
     def connection_lost(self, exc):
         print('The server closed the connection')
+        print(str(exc))
         print('Stop the event loop')
         self.loop.stop()
 
 loop = asyncio.get_event_loop()
-message = 'Hello World!'
+message = 'IAMAT kiwi.cs.ucla.edu +34.068930-118.445127 1479413884.392014450'
 coro = loop.create_connection(lambda: EchoClientProtocol(message, loop),
-                              '127.0.0.1', 8888)
+                              '127.0.0.1', 9000)
 loop.run_until_complete(coro)
 loop.run_forever()
 loop.close()
