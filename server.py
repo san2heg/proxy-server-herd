@@ -3,6 +3,12 @@ import config
 import sys
 import logging
 
+# Events to log:
+# (1) Input / data received
+# (2) Output / response
+# (3) New connections
+# (4) Dropped / closed connections
+
 class ProxyServerClientProtocol(asyncio.Protocol):
     def __init__(self, server_name):
         self.name = server_name
@@ -10,18 +16,37 @@ class ProxyServerClientProtocol(asyncio.Protocol):
 
     def connection_made(self, transport):
         peername = transport.get_extra_info('peername')
-        logger.info('Connection from {}'.format(peername))
+        logger.info('New connection from {}'.format(peername))
         self.transport = transport
 
     def data_received(self, data):
         message = data.decode()
-        logger.info('Data received: {!r}'.format(message))
+        logger.info('Received input data: {!r}'.format(message))
 
-        logger.info('Send: {!r}'.format(message))
+        logger.info('Sending output response: {!r}'.format(message))
         self.transport.write(data)
 
-        logger.info('Close the client socket\n')
+        self.flood()
+
+        peername = self.transport.get_extra_info('peername')
+        logger.info('Dropping connection from {}\n'.format(peername))
         self.transport.close()
+
+    def flood(self):
+        for server_name in self.floodlist:
+            self.propagate(server_name, config.SERVER_PORT[server_name])
+
+    def propagate(self, name, port):
+        coro = loop.create_connection(lambda: ProxyClientProtocol('Propagating'), config.SERVER_HOST, port)
+        loop.create_task(coro)
+
+class ProxyClientProtocol(asyncio.Protocol):
+    def __init__(self, message):
+        self.message = message
+
+    def connection_made(self, transport):
+        transport.write(self.message.encode())
+        self.transport = transport
 
 if __name__ == '__main__':
     # Check for bad args
@@ -39,7 +64,7 @@ if __name__ == '__main__':
     # Setup logging
     logger = logging.getLogger(server_name)
 
-    log_format = '%(asctime)s - (%(name)s) %(levelname)s : %(message)s'
+    log_format = '%(asctime)s - %(levelname)s (%(name)s) : %(message)s'
     formatter = logging.Formatter(log_format)
 
     log_dest = './logs/' + server_name.lower() + '.log'
