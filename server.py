@@ -7,34 +7,20 @@ class ProxyServerClientProtocol(asyncio.Protocol):
     def __init__(self, server_name):
         self.name = server_name
         self.floodlist = config.SERVER_FLOODLIST[server_name]
-        self.__init_logger()
-
-    # Setup for logger
-    def __init_logger(self):
-        self.logger = logging.getLogger(self.name)
-        formatter = logging.Formatter('%(asctime)s - (%(name)s) %(levelname)s : %(message)s')
-        fileHandler = logging.FileHandler("./logs/" + self.name.lower() + ".log", mode='w')
-        fileHandler.setFormatter(formatter)
-        streamHandler = logging.StreamHandler()
-        streamHandler.setFormatter(formatter)
-        self.logger.setLevel('INFO')
-        self.logger.addHandler(fileHandler)
-        self.logger.addHandler(streamHandler)
-        self.logger.info('Server Protocol Initialized')
 
     def connection_made(self, transport):
         peername = transport.get_extra_info('peername')
-        self.logger.info('Connection from {}'.format(peername))
+        logger.info('Connection from {}'.format(peername))
         self.transport = transport
 
     def data_received(self, data):
         message = data.decode()
-        self.logger.info('Data received: {!r}'.format(message))
+        logger.info('Data received: {!r}'.format(message))
 
-        self.logger.info('Send: {!r}'.format(message))
+        logger.info('Send: {!r}'.format(message))
         self.transport.write(data)
 
-        self.logger.info('Close the client socket')
+        logger.info('Close the client socket\n')
         self.transport.close()
 
 if __name__ == '__main__':
@@ -50,8 +36,22 @@ if __name__ == '__main__':
         exit(1)
     port_num = config.SERVER_PORT[server_name]
 
-    # Build server
-    server_protocol = ProxyServerClientProtocol(server_name)
+    # Setup logging
+    logger = logging.getLogger(server_name)
+
+    log_format = '%(asctime)s - (%(name)s) %(levelname)s : %(message)s'
+    formatter = logging.Formatter(log_format)
+
+    log_dest = './logs/' + server_name.lower() + '.log'
+    file_handler = logging.FileHandler(log_dest, mode='w')
+    file_handler.setFormatter(formatter)
+
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+
+    logger.setLevel('INFO')
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
 
     # Start server
     loop = asyncio.get_event_loop()
@@ -59,7 +59,6 @@ if __name__ == '__main__':
     server = loop.run_until_complete(coro)
 
     # Serve requests until KeyboardInterrupt
-    logger = logging.getLogger(server_name)
     logger.info('Serving on {}'.format(server.sockets[0].getsockname()))
     try:
         loop.run_forever()
