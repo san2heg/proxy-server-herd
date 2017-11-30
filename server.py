@@ -1,11 +1,25 @@
 import asyncio
 import config
 import sys
+import logging
 
 class ProxyServerClientProtocol(asyncio.Protocol):
-    def __init__(self, server_name, neighbors):
+    def __init__(self, server_name):
         self.name = server_name
-        self.neighbors = neighbors
+        self.floodlist = config.SERVER_FLOODLIST[server_name]
+        self.__init_logger()
+
+    def __init_logger(self):
+        self.logger = logging.getLogger(server_name)
+        formatter = logging.Formatter('%(asctime)s - %(levelname)s : %(message)s')
+        fileHandler = logging.FileHandler("./" + server_name.lower() + ".log", mode='w')
+        fileHandler.setFormatter(formatter)
+        streamHandler = logging.StreamHandler()
+        streamHandler.setFormatter(formatter)
+        self.logger.setLevel('INFO')
+        self.logger.addHandler(fileHandler)
+        self.logger.addHandler(streamHandler)
+        self.logger.info('Server Protocol Initialized for {}'.format(server_name))
 
     def connection_made(self, transport):
         peername = transport.get_extra_info('peername')
@@ -36,7 +50,7 @@ if __name__ == '__main__':
     port_num = config.SERVER_PORT[server_name]
 
     # Build server
-    server_protocol = ProxyServerClientProtocol(server_name, config.SERVER_FLOODLIST[server_name])
+    server_protocol = ProxyServerClientProtocol(server_name)
 
     # Start server
     loop = asyncio.get_event_loop()
@@ -44,7 +58,8 @@ if __name__ == '__main__':
     server = loop.run_until_complete(coro)
 
     # Serve requests until KeyboardInterrupt
-    print('Serving on {}'.format(server.sockets[0].getsockname()))
+    logger = logging.getLogger(server_name)
+    logger.info('Serving on {}'.format(server.sockets[0].getsockname()))
     try:
         loop.run_forever()
     except KeyboardInterrupt:
