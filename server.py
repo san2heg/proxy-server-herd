@@ -9,10 +9,11 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         self.floodlist = config.SERVER_FLOODLIST[server_name]
         self.__init_logger()
 
+    # Setup for logger
     def __init_logger(self):
         self.logger = logging.getLogger(server_name)
         formatter = logging.Formatter('%(asctime)s - %(levelname)s : %(message)s')
-        fileHandler = logging.FileHandler("./" + server_name.lower() + ".log", mode='w')
+        fileHandler = logging.FileHandler("./logs/" + server_name.lower() + ".log", mode='w')
         fileHandler.setFormatter(formatter)
         streamHandler = logging.StreamHandler()
         streamHandler.setFormatter(formatter)
