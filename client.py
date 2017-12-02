@@ -1,6 +1,7 @@
 import asyncio
 import sys
 import config
+import time
 
 class EchoClientProtocol(asyncio.Protocol):
     def __init__(self, message, loop):
@@ -22,10 +23,10 @@ class EchoClientProtocol(asyncio.Protocol):
 
 if __name__ == '__main__':
     server_name = sys.argv[1]
+    message = sys.argv[2]
     port_num = config.SERVER_PORT[server_name]
 
     loop = asyncio.get_event_loop()
-    message = 'IAMAT kiwi.cs.ucla.edu +34.068930-118.445127 1479413884.392014450'
     coro = loop.create_connection(lambda: EchoClientProtocol(message, loop),
                                   '127.0.0.1', port_num)
     loop.run_until_complete(coro)
