@@ -24,7 +24,7 @@ def catch_exceptions(loop, context):
 
 class ProxyServerClientProtocol(asyncio.Protocol):
     # Maps client IDs => most recent AT stamp
-    client_AT_stamps = {}
+    client_stamps = {}
 
     def __init__(self, server_name):
         self.name = server_name
@@ -47,7 +47,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         elif (cmd == 'WHATSAT' and self.check_WHATSAT(args)):
             self.send_WHATSAT(input_list[1], input_list[2], input_list[3], message)
             return
-        elif (cmd == 'AT' and self.check_AT(args)):
+        elif (cmd == 'AT'):
             response_msg = self.response_AT(input_list[3], message)
         else:
             response_msg = '? ' + message
@@ -66,7 +66,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         loop.create_task(coro)
 
     def get_client_location(self, client_id):
-        loc_str = ProxyServerClientProtocol.client_AT_stamps[client_id].split()[4]
+        loc_str = ProxyServerClientProtocol.client_stamps[client_id].split()[4]
         return self.parse_location(loc_str)
 
     def parse_stamp_time(self, stamp):
@@ -74,15 +74,21 @@ class ProxyServerClientProtocol(asyncio.Protocol):
 
     def update_client_stamp(self, client_id, stamp):
         if stamp.split()[3] != client_id:
+            logger.error('Bad call to update_client_stamp')
             return False
+        update = False
         try:
-            if self.parse_stamp_time(stamp) > self.parse_stamp_time(ProxyServerClientProtocol.client_AT_stamps[client_id]):
-                ProxyServerClientProtocol.client_AT_stamps[client_id]
-                return True
+            if self.parse_stamp_time(stamp) > self.parse_stamp_time(ProxyServerClientProtocol.client_stamps[client_id]):
+                ProxyServerClientProtocol.client_stamps[client_id]
+                update = True
         except KeyError:
-            ProxyServerClientProtocol.client_AT_stamps[client_id] = stamp
-            return True
-        return False
+            ProxyServerClientProtocol.client_stamps[client_id] = stamp
+            update = True
+        if update:
+            logger.info('Updated location data for {}'.format(client_id))
+        else:
+            logger.warning('Did not update location data for {}'.format(client_id))
+        return update
 
     # Returns lat, lng string tuple given latlng combined string
     def parse_location(self, loc_str):
@@ -143,7 +149,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
             return False
         # Check if client_id location exists
         try:
-            ProxyServerClientProtocol.client_AT_stamps[args[0]]
+            ProxyServerClientProtocol.client_stamps[args[0]]
         except KeyError:
             logger.error('Client does not yet have a location')
             return False
@@ -163,16 +169,10 @@ class ProxyServerClientProtocol(asyncio.Protocol):
             return False
         return True
 
-    # Example request:
-    # AT Alford +0.263873386 kiwi.cs.ucla.edu +34.068930-118.445127 1479413884.392014450
-    def check_AT(self, args):
-        return True
-
     def response_AT(self, client_id, msg):
         # Update client's AT stamp
         stamp = ' '.join(msg.split()[:6])
-        if self.update_client_stamp(client_id, stamp):
-            logger.info('Updated location data for {}'.format(client_id))
+        self.update_client_stamp(client_id, stamp)
 
         flood_msg = msg + ' {}'.format(self.name)
         self.flood(flood_msg)
@@ -188,13 +188,12 @@ class ProxyServerClientProtocol(asyncio.Protocol):
             time_diff_str = '+' + time_diff_str
 
         # Update client's AT stamp
-        AT_stamp = 'AT {} {} {} {} {}'.format(self.name, time_diff_str, client_id, loc_str, time_str)
-        if self.update_client_stamp(client_id, AT_stamp):
-            logger.info('Updated location data for {}'.format(client_id))
+        stamp = 'AT {} {} {} {} {}'.format(self.name, time_diff_str, client_id, loc_str, time_str)
+        self.update_client_stamp(client_id, stamp)
 
         # Propagate AT stamp to neighboring servers
-        self.flood(AT_stamp + ' ' + self.name)
-        return AT_stamp
+        self.flood(stamp + ' ' + self.name)
+        return ProxyServerClientProtocol.client_stamps[client_id]
 
     def send_WHATSAT(self, client_id, radius_km, info_bound, err_msg):
         print('here')
@@ -215,7 +214,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         context.verify_mode = ssl.CERT_NONE
 
         # Build PlacesHTTPClientProtocol lambda
-        protocol = lambda: PlacesHTTPClientProtocol(request_str, self.transport, int(info_bound), ProxyServerClientProtocol.client_AT_stamps[client_id])
+        protocol = lambda: PlacesHTTPClientProtocol(request_str, self.transport, int(info_bound), ProxyServerClientProtocol.client_stamps[client_id])
 
         # Make HTTP request on top of TCP
         logger.info('Sending HTTP request => ' + request_str)

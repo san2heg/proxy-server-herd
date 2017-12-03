@@ -16,12 +16,6 @@ SERVER_FLOODLIST['Holiday'] = ['Ball', 'Hamilton']
 SERVER_FLOODLIST['Ball'] = ['Welsh', 'Holiday']
 SERVER_FLOODLIST['Welsh'] = ['Alford', 'Ball']
 
-# SERVER_FLOODLIST['Alford'] = ['Hamilton']
-# SERVER_FLOODLIST['Hamilton'] = []
-# SERVER_FLOODLIST['Holiday'] = []
-# SERVER_FLOODLIST['Ball'] = []
-# SERVER_FLOODLIST['Welsh'] = []
-
 # Server Port Mappings
 SERVER_PORT = {}
 SERVER_PORT['Alford'] = 9000
