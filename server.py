@@ -4,18 +4,26 @@ import sys
 import logging
 import datetime
 import time
+import ssl
 
-# Events to log:
-# (1) Input / data received
-# (2) Output / response
-# (3) New connections
-# (4) Dropped / closed connections
+# Write message to transport
+def send_response(transport, message):
+    transport.write(message.encode())
+    logger.info('Sent output response: {!r}'.format(message))
+
+# Close connection identified by transport
+def close_connection(transport):
+    transport.close()
+    peername = transport.get_extra_info('peername')
+    logger.info('Dropped connection from {}\n'.format(peername))
 
 class ProxyServerClientProtocol(asyncio.Protocol):
+    # Maps client IDs => lat,lng locations
+    client_locations = {}
+
     def __init__(self, server_name):
         self.name = server_name
         self.floodlist = config.SERVER_FLOODLIST[server_name]
-        self.locations = {} # Maps client names => locations
 
     def connection_made(self, transport):
         peername = transport.get_extra_info('peername')
@@ -32,25 +40,40 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         if (cmd == 'IAMAT' and self.check_IAMAT(args)):
             response_msg = self.response_IAMAT(input_list[1], input_list[2], input_list[3])
         elif (cmd == 'WHATSAT' and self.check_WHATSAT(args)):
-            response_msg = self.response_WHATSAT(input_list[1], input_list[2], input_list[3])
+            self.response_WHATSAT(input_list[1], input_list[2], input_list[3], message)
+            return
         elif (cmd == 'AT' and self.check_AT(args)):
             origin_server = input_list[1]
             response_msg = 'AT...'
         else:
             response_msg = '? ' + message
 
-        self.transport.write(response_msg.encode())
-        logger.info('Sent output response: {!r}'.format(message))
-
+        send_response(self.transport, response_msg)
         # self.flood('Propagating')
+        close_connection(self.transport)
 
-        peername = self.transport.get_extra_info('peername')
-        self.transport.close()
-        logger.info('Dropped connection from {}\n'.format(peername))
-
-    # TODO
     # Returns True if time_str is a valid ISO 6709 location stamp
-    def check_location(self, loc_str):
+    def check_location(self, loc_str, client_id):
+        lat_str, lng_str = '', ''
+        split_flag, first_flag = True, True
+        for char in loc_str:
+            if ((not first_flag) and (char == '+' or char == '-')):
+                split_flag = False
+            if split_flag:
+                lat_str += char
+            else:
+                lng_str += char
+            if first_flag: first_flag = False
+        try:
+            lat = float(lat_str)
+            lng = float(lng_str)
+        except ValueError:
+            return False
+        if lat > 90 or lat < -90: return False
+        if lng > 180 or lat < -180: return False
+
+        # Update client_locations
+        ProxyServerClientProtocol.client_locations[client_id] = lat_str, lng_str
         return True
 
     # Returns True if time_str is a valid POSIX/UNIX timestamp
@@ -69,7 +92,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
             logger.error('Invalid number of args for IAMAT')
             return False
         # Check ISO 6709 format
-        if (not self.check_location(args[1])):
+        if (not self.check_location(args[1], args[0])):
             logger.error('Invalid ISO 6709 location for IAMAT')
             return False
         # Check POSIX time
@@ -100,13 +123,40 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         if time_difference > 0:
             time_diff_str = '+' + time_diff_str
 
-        # Add/update client location
-        self.locations[client_id] = loc_str
-
         return 'AT {} {} {} {} {}'.format(self.name, time_diff_str, client_id, loc_str, time_str)
 
-    def response_WHATSAT(self, client_id, radius, bound):
-        return 'WHATSAT response'
+    def response_WHATSAT(self, client_id, radius, info_bound, err_msg):
+        # Check if client_id location exists
+        make_request = True
+        try:
+            client_loc = ProxyServerClientProtocol.client_locations[client_id]
+        except KeyError:
+            send_response(self.transport, '? {}'.format(err_msg))
+            close_connection(self.transport)
+            make_request = False
+
+        if make_request:
+            # Build raw HTTP GET request
+            loc_str = '{},{}'.format(client_loc[0], client_loc[1])
+            target = '{}location={}&radius={}&key={}'.format(config.API_TARGET, loc_str, radius, config.API_KEY)
+            host = config.API_HOST
+            request_str = self.build_http_request(host, target)
+
+            # Create SSL context
+            context = ssl.create_default_context()
+            context.check_hostname = False
+            context.verify_mode = ssl.CERT_NONE
+
+            # Make HTTP request on top of TCP
+            coro = loop.create_connection(lambda: PlacesHTTPClientProtocol(request_str, self.transport), config.API_HOST, config.HTTPS_PORT, ssl=context)
+            loop.create_task(coro)
+
+    def build_http_request(self, host, target):
+        request = ''
+        request += 'GET {} HTTP/1.1\r\n'.format(target)
+        request += 'Host: {}\r\n'.format(host)
+        request += '\r\n'
+        return request
 
     def flood(self, msg, origin_server):
         for server_name in self.floodlist:
@@ -122,7 +172,30 @@ class ProxyClientProtocol(asyncio.Protocol):
 
     def connection_made(self, transport):
         transport.write(self.message.encode())
+
+class PlacesHTTPClientProtocol(asyncio.Protocol):
+    def __init__(self, request, first_transport):
+        self.request = request
+        # self.first_tranport is the connection to original client
+        self.first_transport = first_transport
+        # Used to properly close connection from API
+        self.double_crlf_count = 0
+        # Accumulate data before writing to transport
+        self.response_accum = ''
+
+    def connection_made(self, transport):
+        # self.transport is the connection to Google Places API
         self.transport = transport
+        self.transport.write(self.request.encode())
+
+    def data_received(self, data):
+        self.response_accum += data.decode()
+        self.double_crlf_count += data.decode().count('\r\n\r\n')
+        # Manually close connection if a response body end is detected
+        if (self.double_crlf_count >= 2):
+            send_response(self.first_transport, self.response_accum)
+            close_connection(self.first_transport)
+            self.transport.close()
 
 if __name__ == '__main__':
     # Check for bad args

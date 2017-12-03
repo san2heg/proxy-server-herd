@@ -2,7 +2,8 @@
 
 # Google Places API Information
 API_KEY = 'AIzaSyBXZj8pSVL82G08tUNVnBf4TigDIOZ-uIc'
-API_ENDPOINT = 'https://maps.googleapis.com/maps/api/place/nearbysearch/json?'
+API_TARGET = '/maps/api/place/nearbysearch/json?'
+API_HOST = 'maps.googleapis.com'
 
 # Server List
 SERVER_LIST = ['Alford', 'Hamilton', 'Holiday', 'Ball', 'Welsh']
@@ -22,6 +23,8 @@ SERVER_PORT['Hamilton'] = 9001
 SERVER_PORT['Holiday'] = 9002
 SERVER_PORT['Ball'] = 9003
 SERVER_PORT['Welsh'] = 9004
+
+HTTPS_PORT = 443
 
 # Server Host
 SERVER_HOST = '127.0.0.1'
