@@ -59,8 +59,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
 
     def propagate(self, name, port, msg):
         coro = loop.create_connection(lambda: ProxyClientProtocol(msg), config.SERVER_HOST, port)
-        # loop.create_task(coro)
-        asyncio.ensure_future(coro, loop=loop)
+        loop.create_task(coro)
 
     def get_client_location(self, client_id):
         loc_str = ProxyServerClientProtocol.client_AT_stamps[client_id].split()[4]
@@ -200,8 +199,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         # Make HTTP request on top of TCP
         logger.info('Sending HTTP request => ' + request_str)
         coro = loop.create_connection(protocol, config.API_HOST, config.HTTPS_PORT, ssl=context)
-        # loop.create_task(coro)
-        asyncio.ensure_future(coro, loop=loop)
+        loop.create_task(coro)
 
     # Returns a correctly formatted raw HTTP request given host and target
     def build_http_request(self, host, target):
@@ -216,10 +214,13 @@ class ProxyClientProtocol(asyncio.Protocol):
         self.message = message
 
     def connection_made(self, transport):
-        transport.write(self.message.encode())
-        peername = transport.get_extra_info('peername')
+        self.transport = transport
+        self.transport.write(self.message.encode())
+        peername = self.transport.get_extra_info('peername')
         logger.info('Propagated location data to {}\n'.format(peername))
-        transport.close()
+
+    def connection_lost(self, exc):
+        self.transport.close()
 
 class PlacesHTTPClientProtocol(asyncio.Protocol):
     def __init__(self, request, first_transport, bound, header):
