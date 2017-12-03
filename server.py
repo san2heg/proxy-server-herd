@@ -18,6 +18,10 @@ def close_connection(transport):
     peername = transport.get_extra_info('peername')
     logger.info('Dropped connection from {}\n'.format(peername))
 
+# Catch exceptions that get thrown in the event loop
+def catch_exceptions(loop, context):
+    logger.error('Caught exception => {}\nProbably failed to propagate data'.format(context['message']))
+
 class ProxyServerClientProtocol(asyncio.Protocol):
     # Maps client IDs => most recent AT stamp
     client_AT_stamps = {}
@@ -58,12 +62,27 @@ class ProxyServerClientProtocol(asyncio.Protocol):
                 self.propagate(server_name, config.SERVER_PORT[server_name], msg)
 
     def propagate(self, name, port, msg):
-        coro = loop.create_connection(lambda: ProxyClientProtocol(msg), config.SERVER_HOST, port)
+        coro = loop.create_connection(lambda: ProxyClientProtocol(msg, name), config.SERVER_HOST, port)
         loop.create_task(coro)
 
     def get_client_location(self, client_id):
         loc_str = ProxyServerClientProtocol.client_AT_stamps[client_id].split()[4]
         return self.parse_location(loc_str)
+
+    def parse_stamp_time(self, stamp):
+        return float(stamp.split()[5])
+
+    def update_client_stamp(self, client_id, stamp):
+        if stamp.split()[3] != client_id:
+            return False
+        try:
+            if self.parse_stamp_time(stamp) > self.parse_stamp_time(ProxyServerClientProtocol.client_AT_stamps[client_id]):
+                ProxyServerClientProtocol.client_AT_stamps[client_id]
+                return True
+        except KeyError:
+            ProxyServerClientProtocol.client_AT_stamps[client_id] = stamp
+            return True
+        return False
 
     # Returns lat, lng string tuple given latlng combined string
     def parse_location(self, loc_str):
@@ -152,7 +171,8 @@ class ProxyServerClientProtocol(asyncio.Protocol):
     def response_AT(self, client_id, msg):
         # Update client's AT stamp
         stamp = ' '.join(msg.split()[:6])
-        ProxyServerClientProtocol.client_AT_stamps[client_id] = stamp
+        if self.update_client_stamp(client_id, stamp):
+            logger.info('Updated location data for {}'.format(client_id))
 
         flood_msg = msg + ' {}'.format(self.name)
         self.flood(flood_msg)
@@ -169,7 +189,8 @@ class ProxyServerClientProtocol(asyncio.Protocol):
 
         # Update client's AT stamp
         AT_stamp = 'AT {} {} {} {} {}'.format(self.name, time_diff_str, client_id, loc_str, time_str)
-        ProxyServerClientProtocol.client_AT_stamps[client_id] = AT_stamp
+        if self.update_client_stamp(client_id, AT_stamp):
+            logger.info('Updated location data for {}'.format(client_id))
 
         # Propagate AT stamp to neighboring servers
         self.flood(AT_stamp + ' ' + self.name)
@@ -210,14 +231,14 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         return request
 
 class ProxyClientProtocol(asyncio.Protocol):
-    def __init__(self, message):
+    def __init__(self, message, name):
         self.message = message
+        self.prop_name = name
 
     def connection_made(self, transport):
         self.transport = transport
         self.transport.write(self.message.encode())
-        peername = self.transport.get_extra_info('peername')
-        logger.info('Propagated location data to {}\n'.format(peername))
+        logger.info('Propagated location data to {}\n'.format(self.prop_name))
 
     def connection_lost(self, exc):
         self.transport.close()
@@ -297,6 +318,7 @@ if __name__ == '__main__':
 
     # Start server
     loop = asyncio.get_event_loop()
+    # loop.set_exception_handler(catch_exceptions)
     coro = loop.create_server(lambda: ProxyServerClientProtocol(server_name), config.SERVER_HOST, port_num)
     server = loop.run_until_complete(coro)
 
