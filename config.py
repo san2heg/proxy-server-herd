@@ -10,11 +10,17 @@ SERVER_LIST = ['Alford', 'Hamilton', 'Holiday', 'Ball', 'Welsh']
 
 # Server Flooding Mappings
 SERVER_FLOODLIST = {}
-SERVER_FLOODLIST['Alford'] = ['Hamilton', 'Welsh']
-SERVER_FLOODLIST['Hamilton'] = ['Holiday', 'Alford']
-SERVER_FLOODLIST['Holiday'] = ['Ball', 'Hamilton']
-SERVER_FLOODLIST['Ball'] = ['Welsh', 'Holiday']
-SERVER_FLOODLIST['Welsh'] = ['Alford', 'Ball']
+# SERVER_FLOODLIST['Alford'] = ['Hamilton', 'Welsh']
+# SERVER_FLOODLIST['Hamilton'] = ['Holiday', 'Alford']
+# SERVER_FLOODLIST['Holiday'] = ['Ball', 'Hamilton']
+# SERVER_FLOODLIST['Ball'] = ['Welsh', 'Holiday']
+# SERVER_FLOODLIST['Welsh'] = ['Alford', 'Ball']
+
+SERVER_FLOODLIST['Alford'] = ['Hamilton']
+SERVER_FLOODLIST['Hamilton'] = []
+SERVER_FLOODLIST['Holiday'] = []
+SERVER_FLOODLIST['Ball'] = []
+SERVER_FLOODLIST['Welsh'] = []
 
 # Server Port Mappings
 SERVER_PORT = {}

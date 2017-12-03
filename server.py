@@ -52,8 +52,16 @@ class ProxyServerClientProtocol(asyncio.Protocol):
             response_msg = '? ' + message
 
         send_response(self.transport, response_msg)
-        # self.flood('Propagating')
+        self.flood('Propagating', 'Alford')
         close_connection(self.transport)
+
+    def flood(self, msg, origin_server):
+        for server_name in self.floodlist:
+            self.propagate(server_name, config.SERVER_PORT[server_name], msg)
+
+    def propagate(self, name, port, msg):
+        coro = loop.create_connection(lambda: ProxyClientProtocol(msg), config.SERVER_HOST, port)
+        loop.create_task(coro)
 
     # Returns True if time_str is a valid ISO 6709 location stamp
     def check_location(self, loc_str, client_id):
@@ -184,20 +192,13 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         request += '\r\n'
         return request
 
-    def flood(self, msg, origin_server):
-        for server_name in self.floodlist:
-            self.propagate(server_name, config.SERVER_PORT[server_name], msg)
-
-    def propagate(self, name, port, msg):
-        coro = loop.create_connection(lambda: ProxyClientProtocol(msg), config.SERVER_HOST, port)
-        loop.create_task(coro)
-
 class ProxyClientProtocol(asyncio.Protocol):
     def __init__(self, message):
         self.message = message
 
     def connection_made(self, transport):
         transport.write(self.message.encode())
+        transport.close()
 
 class PlacesHTTPClientProtocol(asyncio.Protocol):
     def __init__(self, request, first_transport, bound, header):
