@@ -40,7 +40,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         if (cmd == 'IAMAT' and self.check_IAMAT(args)):
             response_msg = self.response_IAMAT(input_list[1], input_list[2], input_list[3])
         elif (cmd == 'WHATSAT' and self.check_WHATSAT(args)):
-            self.response_WHATSAT(input_list[1], input_list[2], input_list[3], message)
+            self.send_WHATSAT(input_list[1], input_list[2], input_list[3], message)
             return
         elif (cmd == 'AT' and self.check_AT(args)):
             origin_server = input_list[1]
@@ -106,6 +106,27 @@ class ProxyServerClientProtocol(asyncio.Protocol):
     def check_WHATSAT(self, args):
         # Check number of args
         if (len(args) != 3):
+            logger.error('Invalid number of args for WHATSAT')
+            return False
+        # Check if client_id location exists
+        try:
+            ProxyServerClientProtocol.client_locations[args[0]]
+        except KeyError:
+            logger.error('Client does not yet have a location')
+            return False
+        # Check types
+        try:
+            radius = float(args[1])
+            bound = int(args[2])
+        except ValueError:
+            logger.error('Incorrect type for radius or bound')
+            return False
+        # Check range
+        if radius > 50 or radius < 0:
+            logger.error('Radius out of range')
+            return False
+        if bound > 20 or bound < 0:
+            logger.error('Bound out of range')
             return False
         return True
 
@@ -125,32 +146,29 @@ class ProxyServerClientProtocol(asyncio.Protocol):
 
         return 'AT {} {} {} {} {}'.format(self.name, time_diff_str, client_id, loc_str, time_str)
 
-    def response_WHATSAT(self, client_id, radius, info_bound, err_msg):
-        # Check if client_id location exists
-        make_request = True
-        try:
-            client_loc = ProxyServerClientProtocol.client_locations[client_id]
-        except KeyError:
-            send_response(self.transport, '? {}'.format(err_msg))
-            close_connection(self.transport)
-            make_request = False
+    def send_WHATSAT(self, client_id, radius_km, info_bound, err_msg):
+        client_loc = ProxyServerClientProtocol.client_locations[client_id]
 
-        if make_request:
-            # Build raw HTTP GET request
-            loc_str = '{},{}'.format(client_loc[0], client_loc[1])
-            target = '{}location={}&radius={}&key={}'.format(config.API_TARGET, loc_str, radius, config.API_KEY)
-            host = config.API_HOST
-            request_str = self.build_http_request(host, target)
+        # Convert km to m for radius
+        radius_m = str(float(radius_km) * 1000)
 
-            # Create SSL context
-            context = ssl.create_default_context()
-            context.check_hostname = False
-            context.verify_mode = ssl.CERT_NONE
+        # Build raw HTTP GET request
+        loc_str = '{},{}'.format(client_loc[0], client_loc[1])
+        target = '{}location={}&radius={}&key={}'.format(config.API_TARGET, loc_str, radius_m, config.API_KEY)
+        host = config.API_HOST
+        request_str = self.build_http_request(host, target)
 
-            # Make HTTP request on top of TCP
-            coro = loop.create_connection(lambda: PlacesHTTPClientProtocol(request_str, self.transport), config.API_HOST, config.HTTPS_PORT, ssl=context)
-            loop.create_task(coro)
+        # Create SSL context
+        context = ssl.create_default_context()
+        context.check_hostname = False
+        context.verify_mode = ssl.CERT_NONE
 
+        # Make HTTP request on top of TCP
+        logger.info('Sending HTTP request => ' + request_str)
+        coro = loop.create_connection(lambda: PlacesHTTPClientProtocol(request_str, self.transport), config.API_HOST, config.HTTPS_PORT, ssl=context)
+        loop.create_task(coro)
+
+    # Returns a correctly formatted raw HTTP request given host and target
     def build_http_request(self, host, target):
         request = ''
         request += 'GET {} HTTP/1.1\r\n'.format(target)
