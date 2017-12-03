@@ -13,7 +13,7 @@ class EchoClientProtocol(asyncio.Protocol):
         print('Data sent: {!r}'.format(self.message))
 
     def data_received(self, data):
-        print('Data received: {!r}'.format(data.decode()))
+        print('Data received: {}'.format(data.decode()))
 
     def connection_lost(self, exc):
         print('The server closed the connection')

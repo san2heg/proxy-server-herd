@@ -5,6 +5,7 @@ import logging
 import datetime
 import time
 import ssl
+import json
 
 # Write message to transport
 def send_response(transport, message):
@@ -18,8 +19,10 @@ def close_connection(transport):
     logger.info('Dropped connection from {}\n'.format(peername))
 
 class ProxyServerClientProtocol(asyncio.Protocol):
-    # Maps client IDs => lat,lng locations
+    # Maps client IDs => most recent lat,lng locations
     client_locations = {}
+    # Maps client IDs => most recent AT stamp
+    client_AT_stamps = {}
 
     def __init__(self, server_name):
         self.name = server_name
@@ -144,7 +147,9 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         if time_difference > 0:
             time_diff_str = '+' + time_diff_str
 
-        return 'AT {} {} {} {} {}'.format(self.name, time_diff_str, client_id, loc_str, time_str)
+        AT_stamp = 'AT {} {} {} {} {}'.format(self.name, time_diff_str, client_id, loc_str, time_str)
+        ProxyServerClientProtocol.client_AT_stamps[client_id] = AT_stamp
+        return AT_stamp
 
     def send_WHATSAT(self, client_id, radius_km, info_bound, err_msg):
         client_loc = ProxyServerClientProtocol.client_locations[client_id]
@@ -163,9 +168,12 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         context.check_hostname = False
         context.verify_mode = ssl.CERT_NONE
 
+        # Build PlacesHTTPClientProtocol lambda
+        protocol = lambda: PlacesHTTPClientProtocol(request_str, self.transport, int(info_bound), ProxyServerClientProtocol.client_AT_stamps[client_id])
+
         # Make HTTP request on top of TCP
         logger.info('Sending HTTP request => ' + request_str)
-        coro = loop.create_connection(lambda: PlacesHTTPClientProtocol(request_str, self.transport), config.API_HOST, config.HTTPS_PORT, ssl=context)
+        coro = loop.create_connection(protocol, config.API_HOST, config.HTTPS_PORT, ssl=context)
         loop.create_task(coro)
 
     # Returns a correctly formatted raw HTTP request given host and target
@@ -192,8 +200,10 @@ class ProxyClientProtocol(asyncio.Protocol):
         transport.write(self.message.encode())
 
 class PlacesHTTPClientProtocol(asyncio.Protocol):
-    def __init__(self, request, first_transport):
+    def __init__(self, request, first_transport, bound, header):
         self.request = request
+        self.bound = bound
+        self.header = header
         # self.first_tranport is the connection to original client
         self.first_transport = first_transport
         # Used to properly close connection from API
@@ -211,9 +221,26 @@ class PlacesHTTPClientProtocol(asyncio.Protocol):
         self.double_crlf_count += data.decode().count('\r\n\r\n')
         # Manually close connection if a response body end is detected
         if (self.double_crlf_count >= 2):
-            send_response(self.first_transport, self.response_accum)
+            json_str = self.parse_data(self.response_accum)
+            send_response(self.first_transport, json_str)
             close_connection(self.first_transport)
             self.transport.close()
+
+    # Take raw data string from Google Places API and return bounded json
+    # string with AT stamp
+    def parse_data(self, data):
+        # Process string to prepare for json conversion
+        data_right = data.split('\r\n\r\n')[1]
+        start, end = data_right.index('{'), data_right.rindex('}')
+        json_str = data_right[start:end+1]
+        json_str = json_str.strip().replace('\r\n', '').replace('\n', '')
+
+        # Convert to json and limit results to bound
+        json_obj = json.loads(json_str)
+        if len(json_obj['results']) > self.bound:
+            json_obj['results'] = json_obj['results'][:self.bound]
+
+        return self.header + '\n' + json.dumps(json_obj, indent=2) + '\n\n'
 
 if __name__ == '__main__':
     # Check for bad args
