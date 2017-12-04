@@ -50,14 +50,14 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         cmd = input_list[0]
         args = input_list[1:]
         if (cmd == 'IAMAT' and self.check_IAMAT(args)):
-            response_msg = self.response_IAMAT(input_list[1], input_list[2], input_list[3])
+            response_msg = self.response_IAMAT(input_list[1], input_list[2], input_list[3]) + '\n'
         elif (cmd == 'WHATSAT' and self.check_WHATSAT(args)):
             self.send_WHATSAT(input_list[1], input_list[2], input_list[3], message)
             return
         elif (cmd == 'AT'):
             response_msg = self.response_AT(input_list[3], message)
         else:
-            response_msg = '? ' + message
+            response_msg = '? ' + message + '\n'
 
         send_response(self.transport, response_msg)
         close_connection(self.transport)
