@@ -20,7 +20,14 @@ def close_connection(transport):
 
 # Catch exceptions that get thrown in the event loop
 def catch_exceptions(loop, context):
-    logger.error('Caught exception => {}\nProbably failed to propagate data'.format(context['message']))
+    try:
+        exception = context['exception']
+        if isinstance(exception, ConnectionRefusedError):
+            logger.error('Failed to connect, neighboring server might be down')
+        else:
+            logger.error('Generic Error => {}'.format(context['message']))
+    except KeyError:
+        logger.error('Generic Error => {}'.format(context['message']))
 
 class ProxyServerClientProtocol(asyncio.Protocol):
     # Maps client IDs => most recent AT stamp
