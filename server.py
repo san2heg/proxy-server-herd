@@ -62,6 +62,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         send_response(self.transport, response_msg)
         close_connection(self.transport)
 
+    # Propagates msg to all neighboring servers while avoiding infinite loops
     def flood(self, msg):
         counterlist = msg.split()[5:]
         for server_name in self.floodlist:
@@ -72,13 +73,17 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         coro = loop.create_connection(lambda: ProxyClientProtocol(msg, name), config.SERVER_HOST, port)
         loop.create_task(coro)
 
+    # Returns a lat, lng string tuple given client_id
     def get_client_location(self, client_id):
         loc_str = ProxyServerClientProtocol.client_stamps[client_id].split()[4]
         return self.parse_location(loc_str)
 
+    # Returns the timestamp of a given AT stamp
     def parse_stamp_time(self, stamp):
         return float(stamp.split()[5])
 
+    # Update client stamp with new stamp only if new timestamp is greater than
+    # old timestamp
     def update_client_stamp(self, client_id, stamp):
         if stamp.split()[3] != client_id:
             logger.error('Bad call to update_client_stamp')
@@ -176,9 +181,11 @@ class ProxyServerClientProtocol(asyncio.Protocol):
             return False
         return True
 
+    # Example request:
+    # AT Alford +0.263873386 kiwi.cs.ucla.edu +34.068930-118.445127 1479413884.392014450 Alford
     def response_AT(self, client_id, msg):
         origin_server = msg.split()[-1]
-        peername = transport.get_extra_info('peername')
+        peername = self.transport.get_extra_info('peername')
         logger.info('{} connection is server {} propagating data'.format(peername, origin_server))
 
         # Update client's AT stamp
@@ -206,6 +213,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         self.flood(stamp + ' ' + self.name)
         return ProxyServerClientProtocol.client_stamps[client_id]
 
+    # Builds and sends HTTP request
     def send_WHATSAT(self, client_id, radius_km, info_bound, err_msg):
         print('here')
         client_loc = self.get_client_location(client_id)
@@ -225,6 +233,8 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         context.verify_mode = ssl.CERT_NONE
 
         # Build PlacesHTTPClientProtocol lambda
+        # The above protocol is the callback that sends the final JSON data to
+        # the original client
         protocol = lambda: PlacesHTTPClientProtocol(request_str, self.transport, int(info_bound), ProxyServerClientProtocol.client_stamps[client_id])
 
         # Make HTTP request on top of TCP
@@ -240,6 +250,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         request += '\r\n'
         return request
 
+# Used as a client to propagate location data, does not bother receiving data
 class ProxyClientProtocol(asyncio.Protocol):
     def __init__(self, message, name):
         self.message = message
@@ -255,6 +266,8 @@ class ProxyClientProtocol(asyncio.Protocol):
         self.transport.close()
         logger.info('Dropped connection to server {}\n'.format(self.prop_name))
 
+# Used to send HTTP request to Google Places API and send final JSON response
+# to original client
 class PlacesHTTPClientProtocol(asyncio.Protocol):
     def __init__(self, request, first_transport, bound, header):
         self.request = request

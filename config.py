@@ -18,11 +18,11 @@ SERVER_FLOODLIST['Welsh'] = ['Alford', 'Ball']
 
 # Server Port Mappings
 SERVER_PORT = {}
-SERVER_PORT['Alford'] = 9000
-SERVER_PORT['Hamilton'] = 9001
-SERVER_PORT['Holiday'] = 9002
-SERVER_PORT['Ball'] = 9003
-SERVER_PORT['Welsh'] = 9004
+SERVER_PORT['Alford'] = 17415
+SERVER_PORT['Hamilton'] = 17416
+SERVER_PORT['Holiday'] = 17417
+SERVER_PORT['Ball'] = 17418
+SERVER_PORT['Welsh'] = 17419
 
 HTTPS_PORT = 443
 
