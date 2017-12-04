@@ -91,7 +91,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         update = False
         try:
             if self.parse_stamp_time(stamp) > self.parse_stamp_time(ProxyServerClientProtocol.client_stamps[client_id]):
-                ProxyServerClientProtocol.client_stamps[client_id]
+                ProxyServerClientProtocol.client_stamps[client_id] = stamp
                 update = True
         except KeyError:
             ProxyServerClientProtocol.client_stamps[client_id] = stamp
