@@ -177,13 +177,17 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         return True
 
     def response_AT(self, client_id, msg):
+        origin_server = msg.split()[-1]
+        peername = transport.get_extra_info('peername')
+        logger.info('{} connection is server {} propagating data'.format(peername, origin_server))
+
         # Update client's AT stamp
         stamp = ' '.join(msg.split()[:6])
         self.update_client_stamp(client_id, stamp)
 
         flood_msg = msg + ' {}'.format(self.name)
         self.flood(flood_msg)
-        return 'Received updated location'
+        return '{} received updated location'.format(self.name)
 
     # Example response:
     # AT Alford +0.263873386 kiwi.cs.ucla.edu +34.068930-118.445127 1479413884.392014450
@@ -242,12 +246,14 @@ class ProxyClientProtocol(asyncio.Protocol):
         self.prop_name = name
 
     def connection_made(self, transport):
+        logger.info('Connected to server {}'.format(self.prop_name))
         self.transport = transport
         self.transport.write(self.message.encode())
-        logger.info('Propagated location data to {}\n'.format(self.prop_name))
+        logger.info('Propagated location data to server {}\n'.format(self.prop_name))
 
     def connection_lost(self, exc):
         self.transport.close()
+        logger.info('Dropped connection to server {}\n'.format(self.prop_name))
 
 class PlacesHTTPClientProtocol(asyncio.Protocol):
     def __init__(self, request, first_transport, bound, header):
@@ -324,7 +330,7 @@ if __name__ == '__main__':
 
     # Start server
     loop = asyncio.get_event_loop()
-    # loop.set_exception_handler(catch_exceptions)
+    loop.set_exception_handler(catch_exceptions)
     coro = loop.create_server(lambda: ProxyServerClientProtocol(server_name), config.SERVER_HOST, port_num)
     server = loop.run_until_complete(coro)
 
