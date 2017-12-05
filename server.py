@@ -25,9 +25,9 @@ def catch_exceptions(loop, context):
         if isinstance(exception, ConnectionRefusedError):
             logger.error('Failed to connect, neighboring server might be down')
         else:
-            logger.error('Generic Error => {}'.format(context['message']))
+            logger.error('Error => {}'.format(context['exception']))
     except KeyError:
-        logger.error('Generic Error => {}'.format(context['message']))
+        logger.error('Unknown Error => {}'.format(context['message']))
 
 class ProxyServerClientProtocol(asyncio.Protocol):
     # Maps client IDs => most recent AT stamp
@@ -207,10 +207,12 @@ class ProxyServerClientProtocol(asyncio.Protocol):
 
         # Update client's AT stamp
         stamp = 'AT {} {} {} {} {}'.format(self.name, time_diff_str, client_id, loc_str, time_str)
-        self.update_client_stamp(client_id, stamp)
+        if self.update_client_stamp(client_id, stamp):
+            # Propagate AT stamp to neighboring servers if stamp updated
+            self.flood(stamp + ' ' + self.name)
+        else:
+            logger.info('Did not propagate location data')
 
-        # Propagate AT stamp to neighboring servers
-        self.flood(stamp + ' ' + self.name)
         return ProxyServerClientProtocol.client_stamps[client_id]
 
     # Builds and sends HTTP request
