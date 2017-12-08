@@ -20,9 +20,9 @@ Tell server where you are at what time.
 Arguments:
 - Client ID
 - ISO 6709 location
-- POSIX time
+- POSIX/UNIX time
 ```
-python3 client.py Alford 'IAMAT kiwi.cs.ucla.edu 40.79617-74.063124 1332423423.412014450'
+python3 client.py Alford 'IAMAT kiwi.cs.ucla.edu +34.068930-118.445127 1479413884.392014450'
 ```
 
 ### WHATSAT
