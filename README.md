@@ -16,6 +16,7 @@ sh run-servers.sh
 
 ### IAMAT
 Tell server where you are at what time.
+
 Arguments:
 - Client ID
 - ISO 6709 location
@@ -26,6 +27,7 @@ python3 client.py Alford 'IAMAT kiwi.cs.ucla.edu 40.79617-74.063124 1332423423.4
 
 ### WHATSAT
 Request a JSON list of locations near a client. Implemented using [Google Places API](https://developers.google.com/places/)
+
 Arguments:
 - Client ID
 - Radius (km)
