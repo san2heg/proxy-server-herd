@@ -217,7 +217,6 @@ class ProxyServerClientProtocol(asyncio.Protocol):
 
     # Builds and sends HTTP request
     def send_WHATSAT(self, client_id, radius_km, info_bound, err_msg):
-        print('here')
         client_loc = self.get_client_location(client_id)
 
         # Convert km to m for radius
