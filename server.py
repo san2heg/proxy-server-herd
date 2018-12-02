@@ -124,7 +124,7 @@ class ProxyServerClientProtocol(asyncio.Protocol):
         except ValueError:
             return False
         if lat > 90 or lat < -90: return False
-        if lng > 180 or lat < -180: return False
+        if lng > 180 or lng < -180: return False
         return True
 
     # Returns True if time_str is a valid POSIX/UNIX timestamp
